@@ -487,23 +487,41 @@ function buildLib(){
   CATALOG.forEach((cat,i)=>{
     const el=document.createElement('div');
     el.className='fitem';
-    el.innerHTML=`<span class="ficon">${cat.icon}</span><div class="fname">${cat.name}</div>`;
-    // Primär: Klick fügt Möbel in Raummitte ein
-    el.addEventListener('click',()=>addItem(i));
+    el.dataset.idx=i;
+
+    const icon=document.createElement('span');
+    icon.className='ficon';
+    icon.textContent=cat.icon;
+
+    const name=document.createElement('div');
+    name.className='fname';
+    name.textContent=cat.name;
+
+    el.appendChild(icon);
+    el.appendChild(name);
     lib.appendChild(el);
+  });
+
+  // Delegated listener on container avoids per-element binding issues
+  lib.addEventListener('click', e=>{
+    const item=e.target.closest('[data-idx]');
+    if(item) addItem(parseInt(item.dataset.idx, 10));
   });
 }
 
 function addItem(catalogIdx){
   if(!S.room){ alert('Bitte zuerst einen Raum anlegen.'); return; }
   const cat=CATALOG[catalogIdx];
+  if(!cat){ console.error('addItem: ungültiger Index', catalogIdx); return; }
   const r=S.room;
   const innerW=r.w-2*r.wall;
   const innerH=r.h-2*r.wall;
-  // Mittig platzieren, snap
-  const fx=snapM(Math.max(0,(innerW-cat.w)/2));
-  const fy=snapM(Math.max(0,(innerH-cat.h)/2));
-  S.items.push({ type:cat.type, label:cat.name, x:fx, y:fy, w:cat.w, h:cat.h, color:cat.color, rot:0 });
+  const fw=Math.min(cat.w, innerW);
+  const fh=Math.min(cat.h, innerH);
+  const fx=snapM(Math.max(0,(innerW-fw)/2));
+  const fy=snapM(Math.max(0,(innerH-fh)/2));
+  const item={ type:cat.type, label:cat.name, x:fx, y:fy, w:fw, h:fh, color:cat.color, rot:0 };
+  S.items.push(item);
   S.sel=S.items.length-1;
   updateProps();
   draw();
