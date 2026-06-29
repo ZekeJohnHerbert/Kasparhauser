@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raumplaner</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #F0EDE8; --panel: #FAFAF7; --wall: #2C2C2C; --floor: #E8E2D8;
+    --accent: #4A7C59; --accent-light: #EAF2EC; --danger: #C0392B;
+    --text: #1A1A1A; --muted: #7A7570; --border: #D8D4CE;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  header { background: var(--wall); color: #fff; padding: 0 20px; height: 52px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 100; }
+  header h1 { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .btn { padding: 6px 14px; border: none; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .btn-ghost { background: transparent; color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.2); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #3d6b4a; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .left-panel { width: 240px; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .panel-section { padding: 16px; border-bottom: 1px solid var(--border); }
+  .panel-label { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+  .furniture-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .furniture-item { background: #fff; border: 1.5px solid var(--border); border-radius: 6px; padding: 10px 6px; cursor: grab; text-align: center; transition: all 0.15s; user-select: none; }
+  .furniture-item:hover { border-color: var(--accent); background: var(--accent-light); }
+  .furniture-item:active { cursor: grabbing; }
+  .furniture-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+  .furniture-name { font-size: 10px; color: var(--muted); font-weight: 500; }
+  .input-group label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .input-group input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 13px; background: #fff; color: var(--text); outline: none; transition: border-color 0.15s; }
+  .input-group input:focus { border-color: var(--accent); }
+  .right-panel { width: 220px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
+  .prop-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .prop-row label { font-size: 12px; color: var(--muted); min-width: 60px; }
+  .prop-row input[type="number"], .prop-row input[type="text"] { width: 90px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 12px; background: #fff; outline: none; text-align: right; }
+  .prop-row input:focus { border-color: var(--accent); }
+  .color-swatches { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .swatch { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; transition: all 0.1s; }
+  .swatch.active, .swatch:hover { border-color: var(--wall); transform: scale(1.1); }
+  .rotate-btn { width: 100%; padding: 7px; background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 6px; transition: all 0.15s; }
+  .rotate-btn:hover { background: var(--accent); color: #fff; }
+  .btn-danger-full { width: 100%; padding: 7px; background: var(--danger); color: #fff; border: none; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; margin-top: 8px; }
+  .btn-danger-full:hover { background: #a93226; }
+  .empty-state { padding: 20px 16px; text-align: center; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .canvas-area { flex: 1; position: relative; overflow: hidden; background: var(--bg); display: flex; align-items: center; justify-content: center; }
+  #room-canvas { display: block; cursor: default; }
+  .zoom-controls { position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 4px; z-index: 10; }
+  .zoom-btn { width: 32px; height: 32px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text); transition: background 0.1s; }
+  .zoom-btn:hover { background: var(--border); }
+  .scale-indicator { position: absolute; bottom: 16px; left: 16px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); background: rgba(250,250,247,0.9); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); }
+  .drag-ghost { position: fixed; pointer-events: none; opacity: 0.8; z-index: 9999; background: var(--accent); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 12px; transform: translate(-50%, -50%); display: none; white-space: nowrap; }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .modal-backdrop.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--panel); border-radius: 8px; padding: 28px; width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+  .modal h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .modal p { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+  .modal-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn-cancel { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 8px 18px; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 13px; cursor: pointer; }
+  .btn-cancel:hover { border-color: var(--text); color: var(--text); }
+  .tag { display: inline-block; font-family: 'DM Mono', monospace; font-size: 10px; padding: 2px 7px; border-radius: 20px; background: var(--accent-light); color: var(--accent); font-weight: 500; margin-bottom: 10px; }
+  hr.divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+  #no-room-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; pointer-events: none; }
+  #no-room-hint .hint-text { font-size: 14px; color: var(--muted); text-align: center; }
+  #no-room-hint .hint-icon { font-size: 48px; opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Raumplaner</h1>
+  <div class="header-actions">
+    <button class="btn btn-ghost" onclick="clearAll()">Alles löschen</button>
+    <button class="btn btn-primary" onclick="openRoomModal()">+ Raum anlegen</button>
+  </div>
+</header>
+
+<div class="main">
+  <div class="left-panel">
+    <div class="panel-section">
+      <div class="panel-label">Möbel-Bibliothek</div>
+      <div class="furniture-grid" id="furniture-library"></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Maßstab</div>
+      <div class="input-group">
+        <label>1 cm = __ px</label>
+        <input type="number" id="scale-input" value="6" min="2" max="20" step="1" onchange="updateScale(this.value)">
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Raster-Snap (cm)</div>
+      <div class="input-group">
+        <input type="number" id="grid-input" value="10" min="5" max="100" step="5" onchange="updateGrid(this.value)">
+      </div>
+    </div>
+  </div>
+
+  <div class="canvas-area" id="canvas-area">
+    <div id="no-room-hint">
+      <div class="hint-icon">🏠</div>
+      <div class="hint-text">Klicke auf "+ Raum anlegen"<br>um zu starten</div>
+    </div>
+    <canvas id="room-canvas"></canvas>
+    <div class="scale-indicator" id="scale-indicator">Kein Raum</div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="doZoom(1.2)">+</button>
+      <button class="zoom-btn" onclick="doZoom(1/1.2)">−</button>
+      <button class="zoom-btn" onclick="resetView()" title="Ansicht zurücksetzen">⊙</button>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-section">
+      <div class="panel-label">Eigenschaften</div>
+      <div id="properties-panel">
+        <div class="empty-state">Klicke auf ein Möbelstück um es zu bearbeiten.</div>
+      </div>
+    </div>
+    <div class="panel-section" id="room-info-section" style="display:none">
+      <div class="panel-label">Raum</div>
+      <div id="room-info"></div>
+    </div>
+  </div>
+</div>
+
+<div class="drag-ghost" id="drag-ghost"></div>
+
+<div class="modal-backdrop" id="room-modal">
+  <div class="modal">
+    <span class="tag">Neuer Raum</span>
+    <h2>Raummaße eingeben</h2>
+    <p>Gib Breite und Tiefe deines Raums in Zentimetern ein.</p>
+    <div class="modal-inputs">
+      <div class="input-group"><label>Breite (cm)</label><input type="number" id="room-w" value="400" min="50" max="2000" step="10"></div>
+      <div class="input-group"><label>Tiefe (cm)</label><input type="number" id="room-h" value="500" min="50" max="2000" step="10"></div>
+      <div class="input-group"><label>Raumhöhe (cm)</label><input type="number" id="room-height-cm" value="250" min="150" max="500" step="10"></div>
+      <div class="input-group"><label>Wandstärke (cm)</label><input type="number" id="wall-thickness" value="15" min="5" max="50" step="5"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeRoomModal()">Abbrechen</button>
+      <button class="btn btn-primary" onclick="createRoom()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────
+const state = {
+  room: null,
+  furniture: [],
+  selected: null,
+  scale: 6,
+  gridCm: 10,
+  zoom: 1,
+  pan: { x: 0, y: 0 },
+  drag: null,
+  resize: null,
+  isPanning: false,
+  panStart: null,
+};
+
+// ── CATALOG ────────────────────────────────────────────
+const CATALOG = [
+  { type: 'sofa',            name: 'Sofa',              icon: '🛋️', w: 200, h: 85,  color: '#8B9DC3' },
+  { type: 'bed-single',      name: 'Einzelbett',        icon: '🛏️', w: 90,  h: 200, color: '#B7A89B' },
+  { type: 'bed-double',      name: 'Doppelbett',        icon: '🛏️', w: 160, h: 200, color: '#B7A89B' },
+  { type: 'desk',            name: 'Schreibtisch',      icon: '🖥️', w: 140, h: 70,  color: '#A8B89B' },
+  { type: 'table',           name: 'Esstisch',          icon: '🪑', w: 120, h: 80,  color: '#C4A882' },
+  { type: 'wardrobe',        name: 'Kleiderschrank',    icon: '🚪', w: 180, h: 60,  color: '#B8A89C' },
+  { type: 'bath',            name: 'Badewanne',         icon: '🛁', w: 170, h: 75,  color: '#9DC3C3' },
+  { type: 'toilet',          name: 'Toilette',          icon: '🚽', w: 40,  h: 65,  color: '#9DC3C3' },
+  { type: 'sink',            name: 'Waschbecken',       icon: '🪠', w: 60,  h: 50,  color: '#9DC3C3' },
+  { type: 'shower',          name: 'Dusche',            icon: '🚿', w: 90,  h: 90,  color: '#9DC3C3' },
+  { type: 'chair',           name: 'Stuhl',             icon: '🪑', w: 50,  h: 50,  color: '#C4A882' },
+  { type: 'bookshelf',       name: 'Regal',             icon: '📚', w: 80,  h: 30,  color: '#B8A089' },
+  { type: 'tv',              name: 'TV-Schrank',        icon: '📺', w: 140, h: 45,  color: '#6B7A8D' },
+  { type: 'plant',           name: 'Pflanze',           icon: '🌿', w: 40,  h: 40,  color: '#7AB87A' },
+  { type: 'door',            name: 'Tür',               icon: '🚪', w: 90,  h: 12,  color: '#C8B89A' },
+  { type: 'window',          name: 'Fenster',           icon: '🪟', w: 100, h: 12,  color: '#A8C4D4' },
+  { type: 'stairs-straight', name: 'Treppe (gerade)',   icon: '🪜', w: 100, h: 200, color: '#C8BC9A' },
+  { type: 'stairs-l',        name: 'Treppe (L-Form)',   icon: '🪜', w: 150, h: 150, color: '#C8BC9A' },
+  { type: 'stairs-u',        name: 'Treppe (U-Form)',   icon: '🪜', w: 120, h: 250, color: '#C8BC9A' },
+];
+
+const SWATCHES = [
+  '#8B9DC3','#B7A89B','#A8B89B','#C4A882','#B8A89C',
+  '#9DC3C3','#7AB87A','#C8B89A','#A8C4D4','#C3A0A0',
+  '#9B8BB5','#6B7A8D','#4A7C59','#E8C87A','#C8BC9A',
+];
+
+const STAIR_TYPES = new Set(['stairs-straight', 'stairs-l', 'stairs-u']);
+
+// ── CANVAS SETUP ───────────────────────────────────────
+const canvas = document.getElementById('room-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const area = document.getElementById('canvas-area');
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight;
+  draw();
+}
+
+function cmToPx(cm) { return cm * state.scale; }
+function pxToCm(px) { return px / state.scale; }
+function snap(cm) { const g = state.gridCm; return Math.round(cm / g) * g; }
+
+function worldToCanvas(wx, wy) {
+  return {
+    x: wx * state.zoom + state.pan.x + canvas.width / 2,
+    y: wy * state.zoom + state.pan.y + canvas.height / 2,
+  };
+}
+function canvasToWorld(cx, cy) {
+  return {
+    x: (cx - canvas.width / 2 - state.pan.x) / state.zoom,
+    y: (cy - canvas.height / 2 - state.pan.y) / state.zoom,
+  };
+}
+
+// ── DRAW ───────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  document.getElementById('no-room-hint').style.display = state.room ? 'none' : 'flex';
+  if (!state.room) { updateScaleIndicator(); return; }
+
+  ctx.save();
+  ctx.translate(canvas.width / 2 + state.pan.x, canvas.height / 2 + state.pan.y);
+  ctx.scale(state.zoom, state.zoom);
+  drawRoom();
+  drawAllFurniture();
+  ctx.restore();
+  updateScaleIndicator();
+}
+
+function drawRoom() {
+  const r = state.room;
+  const W = cmToPx(r.w), H = cmToPx(r.h), T = cmToPx(r.wallThickness);
+  const ox = -W / 2, oy = -H / 2;
+
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 6;
+  ctx.fillStyle = '#2C2C2C';
+  ctx.fillRect(ox, oy, W, H);
+  ctx.shadowColor = 'transparent';
+
+  ctx.fillStyle = '#E8E2D8';
+  ctx.fillRect(ox + T, oy + T, W - 2*T, H - 2*T);
+
+  // Grid
+  const iX = ox + T, iY = oy + T, iW = W - 2*T, iH = H - 2*T;
+  const gPx = cmToPx(state.gridCm);
+  ctx.strokeStyle = '#D4CFC7';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= iW; x += gPx) {
+    ctx.beginPath(); ctx.moveTo(iX + x, iY); ctx.lineTo(iX + x, iY + iH); ctx.stroke();
+  }
+  for (let y = 0; y <= iH; y += gPx) {
+    ctx.beginPath(); ctx.moveTo(iX, iY + y); ctx.lineTo(iX + iW, iY + y); ctx.stroke();
+  }
+
+  // Dimension labels
+  const lz = state.zoom;
+  ctx.fillStyle = '#7A7570';
+  ctx.font = `${12/lz}px DM Mono, monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${r.w} cm`, 0, oy + H + 18/lz);
+  ctx.save();
+  ctx.rotate(Math.PI / 2);
+  ctx.fillText(`${r.h} cm`, 0, -(ox + W + 18/lz));
+  ctx.restore();
+  ctx.font = `${9/lz}px DM Mono, monospace`;
+  ctx.fillStyle = '#aaa';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Wand: ${r.wallThickness}cm`, ox + 3, oy - 5/lz);
+}
+
+function drawAllFurniture() {
+  const r = state.room;
+  const offX = -cmToPx(r.w) / 2 + cmToPx(r.wallThickness);
+  const offY = -cmToPx(r.h) / 2 + cmToPx(r.wallThickness);
+
+  state.furniture.forEach((f, i) => {
+    const sel = state.selected === i;
+    const fx = offX + cmToPx(f.x);
+    const fy = offY + cmToPx(f.y);
+    const fw = cmToPx(f.w);
+    const fh = cmToPx(f.h);
+
+    ctx.save();
+    ctx.translate(fx + fw / 2, fy + fh / 2);
+    ctx.rotate((f.rotation || 0) * Math.PI / 180);
+
+    if (sel) { ctx.shadowColor = 'rgba(74,124,89,0.4)'; ctx.shadowBlur = 10; }
+
+    ctx.fillStyle = f.color || '#8B9DC3';
+    ctx.beginPath();
+    roundRect(ctx, -fw/2, -fh/2, fw, fh, 3);
+    ctx.fill();
+
+    ctx.strokeStyle = sel ? '#4A7C59' : 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = (sel ? 2 : 1) / state.zoom;
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (STAIR_TYPES.has(f.type)) {
+      drawStairs(ctx, f.type, -fw/2, -fh/2, fw, fh, state.zoom);
+    } else {
+      const cat = CATALOG.find(c => c.type === f.type);
+      const fs = Math.max(10, Math.min(fw, fh) * 0.35) / state.zoom;
+      ctx.font = `${fs}px serif`;
+      if (cat) ctx.fillText(cat.icon, 0, -2/state.zoom);
+    }
+
+    ctx.font = `${Math.max(7, 9/state.zoom)}px DM Sans, sans-serif`;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillText(f.label, 0, fh/2 - 8/state.zoom);
+
+    if (sel) {
+      ctx.font = `bold ${Math.max(7, 8/state.zoom)}px DM Mono, monospace`;
+      ctx.fillStyle = '#4A7C59';
+      ctx.fillText(`${f.w}×${f.h}`, 0, STAIR_TYPES.has(f.type) ? -fh/2 + 14/state.zoom : 10/state.zoom);
+    }
+
+    ctx.restore();
+
+    if (sel) drawHandles(fx, fy, fw, fh);
+  });
+}
+
+// ── STAIRCASE DRAWING ──────────────────────────────────
+function drawStairs(ctx, type, x, y, fw, fh, zoom) {
+  if (type === 'stairs-straight') drawStairsStraight(ctx, x, y, fw, fh, zoom);
+  else if (type === 'stairs-l')   drawStairsL(ctx, x, y, fw, fh, zoom);
+  else if (type === 'stairs-u')   drawStairsU(ctx, x, y, fw, fh, zoom);
+}
+
+function drawStairsStraight(ctx, x, y, fw, fh, zoom) {
+  const steps = Math.max(3, Math.round(fh / Math.max(1, fw * 0.4)));
+  const sh = fh / steps;
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1 / zoom;
+  for (let i = 1; i < steps; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + i * sh);
+    ctx.lineTo(x + fw, y + i * sh);
+    ctx.stroke();
+  }
+  // Arrow (bottom to top = direction of ascent)
+  const mx = x + fw / 2;
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1.5 / zoom;
+  ctx.beginPath();
+  ctx.moveTo(mx, y + fh - 8/zoom);
+  ctx.lineTo(mx, y + 8/zoom);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(mx - 5/zoom, y + 16/zoom);
+  ctx.lineTo(mx, y + 6/zoom);
+  ctx.lineTo(mx + 5/zoom, y + 16/zoom);
+  ctx.stroke();
+}
+
+function drawStairsL(ctx, x, y, fw, fh, zoom) {
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1 / zoom;
+  const runW = fw * 0.45;
+  const runH = fh * 0.6;
+  const steps1 = Math.max(3, Math.round(runH / Math.max(1, runW * 0.4)));
+  const sh1 = runH / steps1;
+  for (let i = 1; i <= steps1; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + i * sh1);
+    ctx.lineTo(x + runW, y + i * sh1);
+    ctx.stroke();
+  }
+  // Horizontal section
+  const hRunW = fw - runW;
+  const hRunH = fh - runH;
+  const steps2 = Math.max(2, Math.round(hRunW / Math.max(1, hRunH * 0.5)));
+  const sw2 = hRunW / steps2;
+  for (let i = 1; i <= steps2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x + runW + i * sw2, y + runH);
+    ctx.lineTo(x + runW + i * sw2, y + fh);
+    ctx.stroke();
+  }
+  // Divider line
+  ctx.beginPath();
+  ctx.moveTo(x + runW, y + runH);
+  ctx.lineTo(x + fw, y + runH);
+  ctx.stroke();
+}
+
+function drawStairsU(ctx, x, y, fw, fh, zoom) {
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1 / zoom;
+  const runW = fw * 0.38;
+  const landY = fh * 0.48;
+  const landH = fh * 0.08;
+
+  // Left run
+  const steps1 = Math.max(3, Math.round(landY / Math.max(1, runW * 0.4)));
+  const sh1 = landY / steps1;
+  for (let i = 1; i <= steps1; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x, y + i * sh1);
+    ctx.lineTo(x + runW, y + i * sh1);
+    ctx.stroke();
+  }
+  // Right run
+  const remainH = fh - landY - landH;
+  const steps2 = Math.max(3, Math.round(remainH / Math.max(1, runW * 0.4)));
+  const sh2 = remainH / steps2;
+  for (let i = 0; i < steps2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x + fw - runW, y + landY + landH + i * sh2);
+    ctx.lineTo(x + fw, y + landY + landH + i * sh2);
+    ctx.stroke();
+  }
+  // Landing shading
+  ctx.fillStyle = 'rgba(0,0,0,0.07)';
+  ctx.fillRect(x, y + landY, fw, landH);
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.moveTo(x, y + landY); ctx.lineTo(x + fw, y + landY);
+  ctx.moveTo(x, y + landY + landH); ctx.lineTo(x + fw, y + landY + landH);
+  ctx.stroke();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ── RESIZE HANDLES ─────────────────────────────────────
+function drawHandles(fx, fy, fw, fh) {
+  const hs = 7 / state.zoom;
+  const pts = [
+    [fx,       fy      ], [fx + fw,   fy      ], [fx + fw, fy + fh], [fx,    fy + fh],
+    [fx + fw/2, fy     ], [fx + fw, fy + fh/2 ], [fx + fw/2, fy + fh], [fx, fy + fh/2],
+  ];
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#4A7C59';
+  ctx.lineWidth = 1.5 / state.zoom;
+  pts.forEach(([px, py]) => {
+    ctx.beginPath();
+    ctx.arc(px, py, hs / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  });
+}
+
+// ── HIT TESTING ────────────────────────────────────────
+function getFurnitureWorld(f) {
+  const r = state.room;
+  const offX = -cmToPx(r.w) / 2 + cmToPx(r.wallThickness);
+  const offY = -cmToPx(r.h) / 2 + cmToPx(r.wallThickness);
+  return { x: offX + cmToPx(f.x), y: offY + cmToPx(f.y), w: cmToPx(f.w), h: cmToPx(f.h) };
+}
+
+function hitTest(wx, wy) {
+  if (!state.room) return -1;
+  for (let i = state.furniture.length - 1; i >= 0; i--) {
+    const { x, y, w, h } = getFurnitureWorld(state.furniture[i]);
+    if (wx >= x && wx <= x + w && wy >= y && wy <= y + h) return i;
+  }
+  return -1;
+}
+
+function hitTestHandle(wx, wy, idx) {
+  const { x, y, w, h } = getFurnitureWorld(state.furniture[idx]);
+  const tol = 8 / state.zoom;
+  const handles = [
+    { name: 'nw', hx: x,      hy: y      },
+    { name: 'ne', hx: x + w,  hy: y      },
+    { name: 'se', hx: x + w,  hy: y + h  },
+    { name: 'sw', hx: x,      hy: y + h  },
+    { name: 'n',  hx: x + w/2, hy: y     },
+    { name: 'e',  hx: x + w,  hy: y + h/2 },
+    { name: 's',  hx: x + w/2, hy: y + h },
+    { name: 'w',  hx: x,      hy: y + h/2 },
+  ];
+  for (const hd of handles) {
+    if (Math.abs(wx - hd.hx) <= tol && Math.abs(wy - hd.hy) <= tol) return hd.name;
+  }
+  return null;
+}
+
+// ── MOUSE EVENTS ───────────────────────────────────────
+function getWorld(e) {
+  const rect = canvas.getBoundingClientRect();
+  return canvasToWorld(e.clientX - rect.left, e.clientY - rect.top);
+}
+
+canvas.addEventListener('mousedown', e => {
+  const { x: wx, y: wy } = getWorld(e);
+
+  // Check resize handle on selected item
+  if (state.selected !== null) {
+    const hname = hitTestHandle(wx, wy, state.selected);
+    if (hname) {
+      const f = state.furniture[state.selected];
+      state.resize = { index: state.selected, handle: hname, mx0: wx, my0: wy, x0: f.x, y0: f.y, w0: f.w, h0: f.h };
+      return;
+    }
+  }
+
+  const hit = hitTest(wx, wy);
+  if (hit >= 0) {
+    state.selected = hit;
+    const f = state.furniture[hit];
+    const { x, y } = getFurnitureWorld(f);
+    state.drag = { index: hit, offX: wx - x, offY: wy - y };
+    canvas.style.cursor = 'grabbing';
+  } else {
+    state.selected = null;
+    state.isPanning = true;
+    state.panStart = { x: e.clientX - state.pan.x, y: e.clientY - state.pan.y };
+    canvas.style.cursor = 'grabbing';
+  }
+
+  updatePropsPanel();
+  draw();
+});
+
+canvas.addEventListener('mousemove', e => {
+  const { x: wx, y: wy } = getWorld(e);
+
+  if (state.resize) {
+    const rs = state.resize;
+    const f = state.furniture[rs.index];
+    const dx = pxToCm(wx - rs.mx0);
+    const dy = pxToCm(wy - rs.my0);
+    const hn = rs.handle;
+    let nx = rs.x0, ny = rs.y0, nw = rs.w0, nh = rs.h0;
+    if (hn.includes('e')) nw = Math.max(20, snap(rs.w0 + dx));
+    if (hn.includes('s')) nh = Math.max(20, snap(rs.h0 + dy));
+    if (hn.includes('w')) { const dc = snap(dx); nx = rs.x0 + dc; nw = Math.max(20, rs.w0 - dc); }
+    if (hn.includes('n')) { const dc = snap(dy); ny = rs.y0 + dc; nh = Math.max(20, rs.h0 - dc); }
+    f.x = nx; f.y = ny; f.w = nw; f.h = nh;
+    updatePropsPanel();
+    draw();
+    return;
+  }
+
+  if (state.drag) {
+    const f = state.furniture[state.drag.index];
+    const r = state.room;
+    const offX = -cmToPx(r.w) / 2 + cmToPx(r.wallThickness);
+    const offY = -cmToPx(r.h) / 2 + cmToPx(r.wallThickness);
+    f.x = Math.max(0, snap(pxToCm(wx - state.drag.offX - offX)));
+    f.y = Math.max(0, snap(pxToCm(wy - state.drag.offY - offY)));
+    updatePropsPanel();
+    draw();
+    return;
+  }
+
+  if (state.isPanning) {
+    state.pan.x = e.clientX - state.panStart.x;
+    state.pan.y = e.clientY - state.panStart.y;
+    draw();
+    return;
+  }
+
+  // Cursor hint
+  if (state.selected !== null && state.furniture[state.selected]) {
+    const hn = hitTestHandle(wx, wy, state.selected);
+    if (hn) {
+      const map = { nw:'nw-resize', ne:'ne-resize', se:'se-resize', sw:'sw-resize', n:'n-resize', e:'e-resize', s:'s-resize', w:'w-resize' };
+      canvas.style.cursor = map[hn];
+      return;
+    }
+  }
+  canvas.style.cursor = hitTest(wx, wy) >= 0 ? 'grab' : 'default';
+});
+
+canvas.addEventListener('mouseup', () => {
+  state.drag = null;
+  state.resize = null;
+  state.isPanning = false;
+  canvas.style.cursor = 'default';
+});
+
+canvas.addEventListener('dblclick', e => {
+  const { x: wx, y: wy } = getWorld(e);
+  const hit = hitTest(wx, wy);
+  if (hit >= 0) {
+    const name = prompt('Bezeichnung:', state.furniture[hit].label);
+    if (name !== null) { state.furniture[hit].label = name; draw(); updatePropsPanel(); }
+  }
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  doZoom(e.deltaY < 0 ? 1.1 : 1/1.1);
+}, { passive: false });
+
+canvas.addEventListener('dragover', e => e.preventDefault());
+canvas.addEventListener('drop', onCanvasDrop);
+
+// ── DRAG FROM LIBRARY ──────────────────────────────────
+let dragCatalogIdx = null;
+
+function buildLibrary() {
+  const lib = document.getElementById('furniture-library');
+  lib.innerHTML = '';
+  CATALOG.forEach((item, i) => {
+    const el = document.createElement('div');
+    el.className = 'furniture-item';
+    el.draggable = true;
+    el.innerHTML = `<span class="furniture-icon">${item.icon}</span><div class="furniture-name">${item.name}</div>`;
+    el.addEventListener('dragstart', ev => {
+      dragCatalogIdx = i;
+      const ghost = document.getElementById('drag-ghost');
+      ghost.textContent = item.icon + ' ' + item.name;
+      ghost.style.display = 'block';
+      ev.dataTransfer.effectAllowed = 'copy';
+    });
+    lib.appendChild(el);
+  });
+}
+
+document.addEventListener('dragover', e => {
+  const g = document.getElementById('drag-ghost');
+  g.style.left = e.clientX + 'px';
+  g.style.top = e.clientY + 'px';
+});
+document.addEventListener('dragend', () => {
+  document.getElementById('drag-ghost').style.display = 'none';
+});
+
+function onCanvasDrop(e) {
+  e.preventDefault();
+  if (!state.room || dragCatalogIdx === null) return;
+  const rect = canvas.getBoundingClientRect();
+  const { x: wx, y: wy } = canvasToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const r = state.room;
+  const offX = -cmToPx(r.w) / 2 + cmToPx(r.wallThickness);
+  const offY = -cmToPx(r.h) / 2 + cmToPx(r.wallThickness);
+  const cat = CATALOG[dragCatalogIdx];
+  const fx = Math.max(0, snap(pxToCm(wx - offX) - cat.w / 2));
+  const fy = Math.max(0, snap(pxToCm(wy - offY) - cat.h / 2));
+  state.furniture.push({ type: cat.type, label: cat.name, x: fx, y: fy, w: cat.w, h: cat.h, color: cat.color, rotation: 0 });
+  state.selected = state.furniture.length - 1;
+  dragCatalogIdx = null;
+  updatePropsPanel();
+  draw();
+}
+
+// ── PROPERTIES PANEL ───────────────────────────────────
+function updatePropsPanel() {
+  const panel = document.getElementById('properties-panel');
+  if (state.selected === null || !state.furniture[state.selected]) {
+    panel.innerHTML = '<div class="empty-state">Klicke auf ein Möbelstück um es zu bearbeiten.</div>';
+    return;
+  }
+  const f = state.furniture[state.selected];
+  panel.innerHTML = `
+    <div class="prop-row"><label>Name</label><input type="text" value="${f.label}" onchange="setProp('label',this.value)"></div>
+    <div class="prop-row"><label>X (cm)</label><input type="number" value="${f.x}" step="${state.gridCm}" onchange="setProp('x',+this.value)"></div>
+    <div class="prop-row"><label>Y (cm)</label><input type="number" value="${f.y}" step="${state.gridCm}" onchange="setProp('y',+this.value)"></div>
+    <div class="prop-row"><label>Breite</label><input type="number" value="${f.w}" step="5" onchange="setProp('w',+this.value)"></div>
+    <div class="prop-row"><label>Tiefe</label><input type="number" value="${f.h}" step="5" onchange="setProp('h',+this.value)"></div>
+    <div class="prop-row"><label>Rotation</label><input type="number" value="${f.rotation||0}" step="15" onchange="setProp('rotation',+this.value)"></div>
+    <hr class="divider">
+    <div class="panel-label" style="margin-bottom:8px">Farbe</div>
+    <div class="color-swatches" id="swatches"></div>
+    <button class="rotate-btn" onclick="rotateSel(90)">↻ 90° drehen</button>
+    <button class="btn-danger-full" onclick="deleteSel()">Löschen</button>
+  `;
+  const sc = document.getElementById('swatches');
+  SWATCHES.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'swatch' + (f.color === c ? ' active' : '');
+    s.style.background = c;
+    s.onclick = () => { setProp('color', c); updatePropsPanel(); };
+    sc.appendChild(s);
+  });
+}
+
+function setProp(key, val) {
+  if (state.selected === null) return;
+  state.furniture[state.selected][key] = val;
+  draw();
+}
+
+function rotateSel(deg) {
+  if (state.selected === null) return;
+  const f = state.furniture[state.selected];
+  f.rotation = ((f.rotation || 0) + deg) % 360;
+  updatePropsPanel();
+  draw();
+}
+
+function deleteSel() {
+  if (state.selected === null) return;
+  state.furniture.splice(state.selected, 1);
+  state.selected = null;
+  updatePropsPanel();
+  draw();
+}
+
+// ── ROOM MANAGEMENT ────────────────────────────────────
+function openRoomModal() { document.getElementById('room-modal').classList.add('open'); }
+function closeRoomModal() { document.getElementById('room-modal').classList.remove('open'); }
+
+document.getElementById('room-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('room-modal')) closeRoomModal();
+});
+
+function createRoom() {
+  const w = parseInt(document.getElementById('room-w').value);
+  const h = parseInt(document.getElementById('room-h').value);
+  const heightCm = parseInt(document.getElementById('room-height-cm').value);
+  const wallThickness = parseInt(document.getElementById('wall-thickness').value);
+  if (!w || !h || w < 50 || h < 50) { alert('Bitte gültige Maße eingeben (min. 50 cm).'); return; }
+  state.room = { w, h, heightCm, wallThickness };
+  state.furniture = [];
+  state.selected = null;
+  state.pan = { x: 0, y: 0 };
+
+  // Auto-fit zoom
+  const area = document.getElementById('canvas-area');
+  const fit = Math.min((area.clientWidth * 0.75) / cmToPx(w), (area.clientHeight * 0.75) / cmToPx(h), 1.5);
+  state.zoom = Math.max(0.3, fit);
+
+  document.getElementById('room-info-section').style.display = 'block';
+  document.getElementById('room-info').innerHTML = `
+    <div style="font-size:12px;color:var(--muted);line-height:1.9">
+      <div>${w} × ${h} cm</div>
+      <div>Höhe: ${heightCm} cm</div>
+      <div>Nutzfläche: ${((w/100)*(h/100)).toFixed(1)} m²</div>
+    </div>`;
+
+  closeRoomModal();
+  updatePropsPanel();
+  draw();
+}
+
+// ── ZOOM & SCALE ───────────────────────────────────────
+function doZoom(factor) { state.zoom = Math.max(0.15, Math.min(6, state.zoom * factor)); draw(); }
+function resetView() { state.zoom = 1; state.pan = { x: 0, y: 0 }; draw(); }
+function updateScale(v) { state.scale = Math.max(2, Math.min(20, parseInt(v))); draw(); }
+function updateGrid(v) { state.gridCm = Math.max(5, Math.min(100, parseInt(v))); draw(); }
+function updateScaleIndicator() {
+  const el = document.getElementById('scale-indicator');
+  el.textContent = state.room
+    ? `1 cm = ${state.scale}px  |  Zoom ${(state.zoom*100).toFixed(0)}%`
+    : 'Kein Raum';
+}
+
+function clearAll() {
+  if (!confirm('Alles löschen?')) return;
+  state.room = null; state.furniture = []; state.selected = null;
+  state.pan = { x:0, y:0 }; state.zoom = 1;
+  document.getElementById('room-info-section').style.display = 'none';
+  updatePropsPanel(); draw();
+}
+
+// ── KEYBOARD ───────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (document.activeElement.tagName === 'INPUT') return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && state.selected !== null) deleteSel();
+  if (e.key === 'Escape') { state.selected = null; updatePropsPanel(); draw(); }
+  if (e.key === 'r' && state.selected !== null) rotateSel(90);
+});
+
+// ── INIT ───────────────────────────────────────────────
+buildLibrary();
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+</script>
+</body>
+</html>
